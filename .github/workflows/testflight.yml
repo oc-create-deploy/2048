@@ -66,6 +66,7 @@ jobs:
           cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
 
           sed -i '' "s/DEVELOPMENT_TEAM = \"\";/DEVELOPMENT_TEAM = $TEAM_ID;/g" ios/Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/iPhone Developer/Apple Distribution/g' ios/Runner.xcodeproj/project.pbxproj
           echo "APPLE_TEAM_ID=$TEAM_ID" >> "$GITHUB_ENV"
 
       - name: Create App Store export options
