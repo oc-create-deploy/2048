@@ -39,10 +39,20 @@ jobs:
           xcrun simctl status_bar "$DEVICE_UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
           xcrun simctl install "$DEVICE_UDID" build/ios/iphonesimulator/Runner.app
       - name: Capture live iPhone screenshots
+        env:
+          MAESTRO_CLI_NO_ANALYTICS: "1"
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: "300000"
         run: |
           curl -Ls https://get.maestro.mobile.dev | bash
           export PATH="$PATH:$HOME/.maestro/bin"
-          maestro --device "$DEVICE_UDID" test scripts/store-screenshots.yaml
+          maestro --device "$DEVICE_UDID" test scripts/store-screenshots.yaml || {
+            echo "Retrying after simulator driver startup failure"
+            xcrun simctl shutdown "$DEVICE_UDID" || true
+            xcrun simctl boot "$DEVICE_UDID"
+            xcrun simctl bootstatus "$DEVICE_UDID" -b
+            xcrun simctl install "$DEVICE_UDID" build/ios/iphonesimulator/Runner.app
+            maestro --device "$DEVICE_UDID" test scripts/store-screenshots.yaml
+          }
           file app-store-screenshots/*.png
       - name: Upload screenshot artifact
         uses: actions/upload-artifact@v4
