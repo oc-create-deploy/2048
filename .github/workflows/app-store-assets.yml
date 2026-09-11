@@ -1,0 +1,35 @@
+name: App Store Assets
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Build production web app
+        run: |
+          flutter pub get
+          flutter build web --release
+      - name: Capture live iPhone screenshots
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+          python3 -m http.server 8080 --directory build/web > /tmp/2048-http.log 2>&1 &
+          node scripts/capture-store-screenshots.mjs
+      - name: Upload screenshot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-store-screenshots
+          path: app-store-screenshots/*.png
+          if-no-files-found: error
+          retention-days: 14

@@ -6,13 +6,19 @@
 - App Store Connect record: `2048 classic v1.0` (Apple ID `6811016385`)
 - Bundle ID: `com.gamedevplayable.ttte`
 - Marketing version: `1.0.0`
-- Initial build: `1`
+- Current production candidate: version `1.0.0`, build `2`
 - Minimum iOS version: 13.0
 - Supported orientation: portrait (portrait and upside-down portrait on iPad)
 - Network access, tracking, advertising, analytics, accounts, and sensitive-device permissions: none
 - Local data: current board and best score are stored only on the device with Hive
 
 The app includes a full-size opaque 1024×1024 App Store icon and a static, lightweight launch screen. It does not request camera, microphone, photo, location, contacts, Bluetooth, tracking, or notification permissions.
+
+## Public product pages
+
+- Product page: `https://classic-2048-game.pages.dev/`
+- Support: `https://classic-2048-game.pages.dev/support/`
+- Privacy policy: `https://classic-2048-game.pages.dev/privacy/`
 
 ## Validation
 
