@@ -1,4 +1,8 @@
-# 2048 Game made with Flutter
+# 2048
+
+A fast, offline implementation of the classic 2048 puzzle game, built with Flutter animations and Riverpod state management.
+
+The iOS release uses bundle ID `com.gamedevplayable.ttte`. See [APP_STORE_RELEASE.md](APP_STORE_RELEASE.md) for signing, TestFlight, privacy, and release instructions.
 
 ![2048 Game in Flutter Logo](https://user-images.githubusercontent.com/9529847/172828266-75dc15a5-f591-42ea-b037-90ab1efed42e.png)
 
@@ -50,6 +54,4 @@ Step by step posts explaining in details making the 2048 Game in Flutter.
 [Making 2048 Game in Flutter by using Explicit Animations - Part 5](https://medium.com/@angjelkom/making-2048-game-in-flutter-part-5-98f2e9cb14b9) - In this last part we will see how we can use the Debug, Profile and Performance tools to find Animation Junks in Flutter.
 
 # Licence
-flutter_2048 is Licenced under the [MIT Licence](https://github.com/echonox/main/LICENSE)
-
-
+This project is licensed under the [MIT License](LICENSE).

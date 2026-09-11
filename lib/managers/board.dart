@@ -16,7 +16,7 @@ class BoardManager extends StateNotifier<Board> {
   // which will allow us to reuse most of the logic.
   final verticalOrder = [12, 8, 4, 0, 13, 9, 5, 1, 14, 10, 6, 2, 15, 11, 7, 3];
 
-  final StateNotifierProviderRef ref;
+  final Ref ref;
   BoardManager(this.ref) : super(Board.newGame(0, [])) {
     //Load the last saved state or start a new game.
     load();
@@ -35,7 +35,9 @@ class BoardManager extends StateNotifier<Board> {
 
   // Create New Game state.
   Board _newGame() {
-    return Board.newGame(state.best + state.score, [random([])]);
+    final firstTile = random([]);
+    final secondTile = random([firstTile.index]);
+    return Board.newGame(max(state.best, state.score), [firstTile, secondTile]);
   }
 
   // Start New Game
@@ -44,14 +46,18 @@ class BoardManager extends StateNotifier<Board> {
   }
 
   // Check whether the indexes are in the same row or column in the board.
-  bool _inRange(index, nextIndex) {
+  bool _inRange(int index, int nextIndex) {
     return index < 4 && nextIndex < 4 ||
         index >= 4 && index < 8 && nextIndex >= 4 && nextIndex < 8 ||
         index >= 8 && index < 12 && nextIndex >= 8 && nextIndex < 12 ||
         index >= 12 && nextIndex >= 12;
   }
 
-  Tile _calculate(Tile tile, List<Tile> tiles, direction) {
+  Tile _calculate(
+    Tile tile,
+    List<Tile> tiles,
+    SwipeDirection direction,
+  ) {
     bool asc =
         direction == SwipeDirection.left || direction == SwipeDirection.up;
     bool vert =
@@ -97,9 +103,9 @@ class BoardManager extends StateNotifier<Board> {
         direction == SwipeDirection.left || direction == SwipeDirection.up;
     bool vert =
         direction == SwipeDirection.up || direction == SwipeDirection.down;
-    // Sort the list of tiles by index.
+    // Sort a copy so the previous board remains an immutable undo snapshot.
     // If user swipes vertically use the verticalOrder list to retrieve the up/down index
-    state.tiles.sort(((a, b) =>
+    final orderedTiles = [...state.tiles]..sort(((a, b) =>
         (asc ? 1 : -1) *
         (vert
             ? verticalOrder[a.index].compareTo(verticalOrder[b.index])
@@ -107,15 +113,15 @@ class BoardManager extends StateNotifier<Board> {
 
     List<Tile> tiles = [];
 
-    for (int i = 0, l = state.tiles.length; i < l; i++) {
-      var tile = state.tiles[i];
+    for (int i = 0, l = orderedTiles.length; i < l; i++) {
+      var tile = orderedTiles[i];
 
       // Calculate nextIndex for current tile.
       tile = _calculate(tile, tiles, direction);
       tiles.add(tile);
 
       if (i + 1 < l) {
-        var next = state.tiles[i + 1];
+        var next = orderedTiles[i + 1];
         // Assign current tile nextIndex or index to the next tile if its allowed to be moved.
         if (tile.value == next.value) {
           // If user swipes vertically use the verticalOrder list to retrieve the up/down index else use the existing index
@@ -166,7 +172,7 @@ class BoardManager extends StateNotifier<Board> {
             tile.index == next.nextIndex && tile.nextIndex == null) {
           value = tile.value + next.value;
           merged = true;
-          score += tile.value;
+          score += value;
           i += 1;
         }
       }
@@ -286,15 +292,18 @@ class BoardManager extends StateNotifier<Board> {
   }
 
   //Move the tiles using the arrow keys on the keyboard.
-  bool onKey(RawKeyEvent event) {
+  bool onKey(KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return false;
+    }
     SwipeDirection? direction;
-    if (event.isKeyPressed(LogicalKeyboardKey.arrowRight)) {
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
       direction = SwipeDirection.right;
-    } else if (event.isKeyPressed(LogicalKeyboardKey.arrowLeft)) {
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
       direction = SwipeDirection.left;
-    } else if (event.isKeyPressed(LogicalKeyboardKey.arrowUp)) {
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
       direction = SwipeDirection.up;
-    } else if (event.isKeyPressed(LogicalKeyboardKey.arrowDown)) {
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       direction = SwipeDirection.down;
     }
 

@@ -9,7 +9,7 @@ that way we will prevent the user feeling like the game is lag-ish or slow.
 class NextDirectionManager extends StateNotifier<SwipeDirection?> {
   NextDirectionManager() : super(null);
 
-  void queue(direction) {
+  void queue(SwipeDirection direction) {
     state = direction;
   }
 

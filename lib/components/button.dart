@@ -30,9 +30,9 @@ class ButtonWidget extends ConsumerWidget {
     //Button Widget with text for New Game and Try Again button.
     return ElevatedButton(
         style: ButtonStyle(
-            padding: MaterialStateProperty.all<EdgeInsets>(
-                const EdgeInsets.all(16.0)),
-            backgroundColor: MaterialStateProperty.all<Color>(buttonColor)),
+            padding:
+                WidgetStateProperty.all<EdgeInsets>(const EdgeInsets.all(16.0)),
+            backgroundColor: WidgetStateProperty.all<Color>(buttonColor)),
         onPressed: onPressed,
         child: Text(
           text!,

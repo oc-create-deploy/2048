@@ -64,10 +64,10 @@ class _GameState extends ConsumerState<Game>
 
   @override
   Widget build(BuildContext context) {
-    return RawKeyboardListener(
+    return KeyboardListener(
       autofocus: true,
       focusNode: FocusNode(),
-      onKey: (RawKeyEvent event) {
+      onKeyEvent: (KeyEvent event) {
         //Move the tile with the arrows on the keyboard on Desktop
         if (ref.read(boardManager.notifier).onKey(event)) {
           _moveController.forward(from: 0.0);
@@ -81,68 +81,79 @@ class _GameState extends ConsumerState<Game>
         },
         child: Scaffold(
           backgroundColor: backgroundColor,
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      '2048',
-                      style: TextStyle(
-                          color: textColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 52.0),
-                    ),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        const ScoreBoard(),
-                        const SizedBox(
-                          height: 32.0,
-                        ),
-                        Row(
+          body: SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            ButtonWidget(
-                              icon: Icons.undo,
-                              onPressed: () {
-                                //Undo the round.
-                                ref.read(boardManager.notifier).undo();
-                              },
+                            const Text(
+                              '2048',
+                              style: TextStyle(
+                                  color: textColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 52.0),
                             ),
-                            const SizedBox(
-                              width: 16.0,
-                            ),
-                            ButtonWidget(
-                              icon: Icons.refresh,
-                              onPressed: () {
-                                //Restart the game
-                                ref.read(boardManager.notifier).newGame();
-                              },
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                const ScoreBoard(),
+                                const SizedBox(
+                                  height: 32.0,
+                                ),
+                                Row(
+                                  children: [
+                                    ButtonWidget(
+                                      icon: Icons.undo,
+                                      onPressed: () {
+                                        //Undo the round.
+                                        ref.read(boardManager.notifier).undo();
+                                      },
+                                    ),
+                                    const SizedBox(
+                                      width: 16.0,
+                                    ),
+                                    ButtonWidget(
+                                      icon: Icons.refresh,
+                                      onPressed: () {
+                                        //Restart the game
+                                        ref
+                                            .read(boardManager.notifier)
+                                            .newGame();
+                                      },
+                                    )
+                                  ],
+                                )
+                              ],
                             )
                           ],
-                        )
-                      ],
-                    )
-                  ],
+                        ),
+                      ),
+                      const SizedBox(
+                        height: 32.0,
+                      ),
+                      Stack(
+                        children: [
+                          const EmptyBoardWidget(),
+                          TileBoardWidget(
+                              moveAnimation: _moveAnimation,
+                              scaleAnimation: _scaleAnimation)
+                        ],
+                      )
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(
-                height: 32.0,
-              ),
-              Stack(
-                children: [
-                  const EmptyBoardWidget(),
-                  TileBoardWidget(
-                      moveAnimation: _moveAnimation,
-                      scaleAnimation: _scaleAnimation)
-                ],
-              )
-            ],
+            ),
           ),
         ),
       ),

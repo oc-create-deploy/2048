@@ -16,10 +16,19 @@ void main() async {
   //Make sure Hive is initialized first and only after register the adapter.
   await Hive.initFlutter();
   Hive.registerAdapter(BoardAdapter());
-  runApp(const ProviderScope(
-    child: MaterialApp(
+  runApp(const ProviderScope(child: GameApp()));
+}
+
+class GameApp extends StatelessWidget {
+  const GameApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
       title: '2048',
-      home: Game(),
-    ),
-  ));
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(useMaterial3: true),
+      home: const Game(),
+    );
+  }
 }
