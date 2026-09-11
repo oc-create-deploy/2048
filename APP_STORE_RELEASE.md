@@ -3,16 +3,29 @@
 ## App configuration
 
 - Product name: `2048`
-- App Store Connect record: `2048 classic v1.0` (Apple ID `6811016385`)
+- App Store Connect name: `2048 Classic — Number Merge` (Apple ID `6811016385`)
 - Bundle ID: `com.gamedevplayable.ttte`
 - Marketing version: `1.0.0`
-- Current production candidate: version `1.0.0`, build `2`
+- Current production candidate: App Store version `1.0`, binary version `1.0.0`, build `2`
 - Minimum iOS version: 13.0
-- Supported orientation: portrait (portrait and upside-down portrait on iPad)
+- Supported device family and orientation: iPhone only, portrait
 - Network access, tracking, advertising, analytics, accounts, and sensitive-device permissions: none
 - Local data: current board and best score are stored only on the device with Hive
 
 The app includes a full-size opaque 1024×1024 App Store icon and a static, lightweight launch screen. It does not request camera, microphone, photo, location, contacts, Bluetooth, tracking, or notification permissions.
+
+## App Store Connect listing
+
+- Subtitle: `Slide, merge, reach 2048`
+- Primary category: Games → Puzzle, Board
+- Secondary category: Entertainment
+- Age rating: 4+
+- Price: Free
+- Availability: all 175 current App Store territories, including future territories
+- Release method: manual release after approval
+- Build: `2` (VALID; export compliance cleared)
+- App privacy source-of-truth: no data collected and no tracking
+- Third-party content: declared (the original game source is MIT licensed)
 
 ## Public product pages
 
