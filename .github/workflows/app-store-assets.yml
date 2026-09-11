@@ -8,24 +8,42 @@ permissions:
 
 jobs:
   screenshots:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    runs-on: macos-26
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-      - name: Build production web app
+      - name: Build iPhone simulator app
         run: |
           flutter pub get
-          flutter build web --release
+          flutter build ios --simulator --debug
+      - name: Boot 6.9-inch iPhone simulator
+        run: |
+          DEVICE_UDID=$(python3 - <<'PY'
+          import json, subprocess
+          devices = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '-j']))['devices']
+          candidates = [device for runtime in devices.values() for device in runtime if 'iPhone 16 Pro Max' in device['name']]
+          if not candidates:
+              candidates = [device for runtime in devices.values() for device in runtime if 'Pro Max' in device['name']]
+          if not candidates:
+              raise SystemExit('No iPhone Pro Max simulator is available')
+          print(candidates[-1]['udid'])
+          PY
+          )
+          echo "DEVICE_UDID=$DEVICE_UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$DEVICE_UDID" || true
+          xcrun simctl bootstatus "$DEVICE_UDID" -b
+          xcrun simctl status_bar "$DEVICE_UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
+          xcrun simctl install "$DEVICE_UDID" build/ios/iphonesimulator/Runner.app
       - name: Capture live iPhone screenshots
         run: |
-          npm install --no-save playwright@1.55.0
-          npx playwright install --with-deps chromium
-          python3 -m http.server 8080 --directory build/web > /tmp/2048-http.log 2>&1 &
-          node scripts/capture-store-screenshots.mjs
+          curl -Ls https://get.maestro.mobile.dev | bash
+          export PATH="$PATH:$HOME/.maestro/bin"
+          maestro --device "$DEVICE_UDID" test scripts/store-screenshots.yaml
+          file app-store-screenshots/*.png
       - name: Upload screenshot artifact
         uses: actions/upload-artifact@v4
         with:

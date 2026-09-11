@@ -1,0 +1,45 @@
+appId: com.gamedevplayable.ttte
+---
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd
+- takeScreenshot: app-store-screenshots/01-classic-board
+- swipe:
+    start: 85%, 55%
+    end: 15%, 55%
+    duration: 350
+- swipe:
+    start: 50%, 35%
+    end: 50%, 75%
+    duration: 350
+- swipe:
+    start: 15%, 55%
+    end: 85%, 55%
+    duration: 350
+- swipe:
+    start: 50%, 75%
+    end: 50%, 35%
+    duration: 350
+- waitForAnimationToEnd
+- takeScreenshot: app-store-screenshots/02-smooth-gameplay
+- repeat:
+    times: 3
+    commands:
+      - swipe:
+          start: 85%, 55%
+          end: 15%, 55%
+          duration: 350
+      - swipe:
+          start: 50%, 35%
+          end: 50%, 75%
+          duration: 350
+      - swipe:
+          start: 15%, 55%
+          end: 85%, 55%
+          duration: 350
+      - swipe:
+          start: 50%, 75%
+          end: 50%, 35%
+          duration: 350
+- waitForAnimationToEnd
+- takeScreenshot: app-store-screenshots/03-build-your-best-score
