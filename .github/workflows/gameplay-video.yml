@@ -1,0 +1,65 @@
+name: Gameplay Video
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  record:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Build iPhone simulator app
+        run: |
+          flutter pub get
+          flutter build ios --simulator --debug
+      - name: Boot portrait iPhone simulator
+        run: |
+          DEVICE_UDID=$(python3 - <<'PY'
+          import json, subprocess
+          devices = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '-j']))['devices']
+          candidates = [device for runtime in devices.values() for device in runtime if 'iPhone 16 Pro Max' in device['name']]
+          if not candidates:
+              candidates = [device for runtime in devices.values() for device in runtime if 'Pro Max' in device['name']]
+          if not candidates:
+              raise SystemExit('No iPhone Pro Max simulator is available')
+          print(candidates[-1]['udid'])
+          PY
+          )
+          echo "DEVICE_UDID=$DEVICE_UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$DEVICE_UDID" || true
+          xcrun simctl bootstatus "$DEVICE_UDID" -b
+          xcrun simctl status_bar "$DEVICE_UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
+          xcrun simctl install "$DEVICE_UDID" build/ios/iphonesimulator/Runner.app
+      - name: Record live gameplay
+        env:
+          MAESTRO_CLI_NO_ANALYTICS: "1"
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: "300000"
+        run: |
+          curl -Ls https://get.maestro.mobile.dev | bash
+          export PATH="$PATH:$HOME/.maestro/bin"
+          mkdir -p gameplay-video
+          xcrun simctl launch "$DEVICE_UDID" com.gamedevplayable.ttte
+          sleep 3
+          xcrun simctl io "$DEVICE_UDID" recordVideo --codec=h264 --force gameplay-video/2048-gameplay.mov &
+          RECORDER_PID=$!
+          sleep 1
+          maestro --device "$DEVICE_UDID" test scripts/gameplay-video.yaml
+          sleep 2
+          kill -INT "$RECORDER_PID"
+          wait "$RECORDER_PID" || true
+          file gameplay-video/2048-gameplay.mov
+      - name: Upload gameplay video
+        uses: actions/upload-artifact@v4
+        with:
+          name: 2048-gameplay-video
+          path: gameplay-video/2048-gameplay.mov
+          if-no-files-found: error
+          retention-days: 14

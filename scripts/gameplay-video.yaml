@@ -1,0 +1,38 @@
+appId: com.gamedevplayable.ttte
+---
+- launchApp:
+    clearState: true
+- waitForAnimationToEnd
+- repeat:
+    times: 4
+    commands:
+      - swipe:
+          start: 85%, 55%
+          end: 15%, 55%
+          duration: 300
+      - waitForAnimationToEnd
+      - swipe:
+          start: 50%, 35%
+          end: 50%, 75%
+          duration: 300
+      - waitForAnimationToEnd
+      - swipe:
+          start: 15%, 55%
+          end: 85%, 55%
+          duration: 300
+      - waitForAnimationToEnd
+      - swipe:
+          start: 50%, 75%
+          end: 50%, 35%
+          duration: 300
+      - waitForAnimationToEnd
+- swipe:
+    start: 85%, 55%
+    end: 15%, 55%
+    duration: 300
+- waitForAnimationToEnd
+- swipe:
+    start: 50%, 75%
+    end: 50%, 35%
+    duration: 300
+- waitForAnimationToEnd
