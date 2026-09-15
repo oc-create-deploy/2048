@@ -21,8 +21,9 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
         run: |
-          python3 -m pip install --quiet pyjwt cryptography
-          python3 - <<'PY'
+          python3 -m venv "$RUNNER_TEMP/asc-venv"
+          "$RUNNER_TEMP/asc-venv/bin/pip" install --quiet pyjwt cryptography
+          "$RUNNER_TEMP/asc-venv/bin/python" - <<'PY'
           import os, time, json, urllib.request
           import jwt
 
