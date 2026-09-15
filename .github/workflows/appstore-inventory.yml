@@ -2,6 +2,10 @@ name: App Store Inventory
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/appstore-inventory.yml
 
 permissions:
   contents: read
