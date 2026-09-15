@@ -60,7 +60,9 @@ jobs:
           if ! openssl pkcs12 -in "$CERTIFICATE_PATH" -clcerts -nokeys -passin env:P12_PASSWORD -out "$RUNNER_TEMP/distribution.pem"; then
             openssl pkcs12 -legacy -in "$CERTIFICATE_PATH" -clcerts -nokeys -passin env:P12_PASSWORD -out "$RUNNER_TEMP/distribution.pem"
           fi
-          CERTIFICATE_SERIAL=$(openssl x509 -in "$RUNNER_TEMP/distribution.pem" -noout -serial | cut -d= -f2)
+          export CERTIFICATE_SERIAL=$(openssl x509 -in "$RUNNER_TEMP/distribution.pem" -noout -serial | cut -d= -f2)
+          export CERTIFICATE_PATH
+          export PROFILE_PATH
           echo "CERTIFICATE_SERIAL=$CERTIFICATE_SERIAL" >> "$GITHUB_ENV"
           echo "CERTIFICATE_PATH=$CERTIFICATE_PATH" >> "$GITHUB_ENV"
           echo "PROFILE_PATH=$PROFILE_PATH" >> "$GITHUB_ENV"
