@@ -1,0 +1,72 @@
+name: Velvet Solitaire App Store Assets
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  screenshots:
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - name: Check out Velvet Solitaire
+        uses: actions/checkout@v4
+        with:
+          repository: oc-create-deploy/velvet-solitaire
+          ssh-key: ${{ secrets.VELVET_REPO_DEPLOY_KEY }}
+          ref: main
+          path: app
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Build iPhone simulator app
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter build ios --simulator --release
+      - name: Boot 6.9-inch iPhone simulator
+        run: |
+          DEVICE_UDID=$(python3 - <<'PY'
+          import json, subprocess
+          devices = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '-j']))['devices']
+          candidates = [d for runtime in devices.values() for d in runtime if 'iPhone 16 Pro Max' in d['name']]
+          if not candidates:
+              candidates = [d for runtime in devices.values() for d in runtime if 'Pro Max' in d['name']]
+          if not candidates:
+              raise SystemExit('No iPhone Pro Max simulator is available')
+          print(candidates[-1]['udid'])
+          PY
+          )
+          echo "DEVICE_UDID=$DEVICE_UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$DEVICE_UDID" || true
+          xcrun simctl bootstatus "$DEVICE_UDID" -b
+          xcrun simctl status_bar "$DEVICE_UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
+          xcrun simctl install "$DEVICE_UDID" app/build/ios/iphonesimulator/Runner.app
+      - name: Capture live production screenshots
+        env:
+          MAESTRO_CLI_NO_ANALYTICS: "1"
+          MAESTRO_DRIVER_STARTUP_TIMEOUT: "300000"
+        run: |
+          curl -Ls https://get.maestro.mobile.dev | bash
+          export PATH="$PATH:$HOME/.maestro/bin"
+          mkdir -p app-store-screenshots
+          xcrun simctl launch "$DEVICE_UDID" Com.play.solitairegame
+          sleep 5
+          xcrun simctl io "$DEVICE_UDID" screenshot app-store-screenshots/01-game-modes.png
+          maestro --device "$DEVICE_UDID" test app/scripts/store-screenshots.yaml
+          for name in 02-klondike-board 03-klondike-gameplay; do
+            SOURCE=$(find "$HOME/.maestro" -type f -name "$name.png" -print -quit 2>/dev/null || true)
+            test -n "$SOURCE"
+            cp "$SOURCE" "app-store-screenshots/$name.png"
+          done
+          file app-store-screenshots/*.png
+      - name: Upload screenshot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: velvet-solitaire-app-store-screenshots
+          path: app-store-screenshots/*.png
+          if-no-files-found: error
+          retention-days: 30
