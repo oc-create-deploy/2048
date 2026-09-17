@@ -1,0 +1,62 @@
+[
+  {
+    "slug": "prism-stack",
+    "name": "Prism Stack",
+    "tagline": "Fit blocks. Clear lines. Relax.",
+    "summary": "A clean block puzzle where every placement matters. Fit colorful pieces onto the board, complete lines, and build a high score at your own pace."
+  },
+  {
+    "slug": "grandstay-manager",
+    "name": "Grandstay Manager",
+    "tagline": "Build your hotel empire.",
+    "summary": "Run a growing hotel, serve guests, improve rooms, and expand your hospitality business in a light management adventure."
+  },
+  {
+    "slug": "chroma-pour",
+    "name": "Chroma Pour",
+    "tagline": "Sort every color perfectly.",
+    "summary": "Pour colored liquids between tubes until every color is neatly separated. Plan each move and solve increasingly tricky puzzles."
+  },
+  {
+    "slug": "lexi-link",
+    "name": "Lexi Link",
+    "tagline": "Connect letters. Find words.",
+    "summary": "Swipe through letters to discover hidden words, complete each board, and sharpen your vocabulary with satisfying word puzzles."
+  },
+  {
+    "slug": "rally-rush",
+    "name": "Rally Rush",
+    "tagline": "Grow the crowd. Reach the goal.",
+    "summary": "Guide your runners through gates and obstacles, grow the strongest crowd, and race toward the finish in quick arcade levels."
+  },
+  {
+    "slug": "cubic-matchscape",
+    "name": "Cubic Matchscape",
+    "tagline": "Find three. Clear the board.",
+    "summary": "Search a colorful pile of 3D objects, collect matching trios, and clear every item before the tray fills up."
+  },
+  {
+    "slug": "empire-idle",
+    "name": "Empire Idle",
+    "tagline": "Grow a business, one tap at a time.",
+    "summary": "Build, upgrade, and automate a growing business empire in an easygoing idle management game."
+  },
+  {
+    "slug": "metro-dash",
+    "name": "Metro Dash",
+    "tagline": "Run fast. Dodge everything.",
+    "summary": "Dash through a lively urban route, avoid obstacles, collect rewards, and keep your run alive for as long as possible."
+  },
+  {
+    "slug": "merge-foundry",
+    "name": "Merge Foundry",
+    "tagline": "Merge pieces. Build more.",
+    "summary": "Combine matching pieces to create upgraded items, unlock new discoveries, and keep your merge board growing."
+  },
+  {
+    "slug": "velvet-solitaire",
+    "name": "Velvet Solitaire",
+    "tagline": "Classic cards, calm play.",
+    "summary": "Enjoy a polished solitaire experience with familiar rules, clear cards, and relaxing play designed for iPhone."
+  }
+]
