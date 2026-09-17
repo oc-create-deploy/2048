@@ -63,6 +63,20 @@ jobs:
             cp "$SOURCE" "app-store-screenshots/$name.png"
           done
           file app-store-screenshots/*.png
+      - name: Upload screenshots to App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          python3 -m venv "$RUNNER_TEMP/asc-venv"
+          "$RUNNER_TEMP/asc-venv/bin/pip" install --quiet requests pyjwt cryptography
+          printf '%s' "$ASC_PRIVATE_KEY" > "$RUNNER_TEMP/AuthKey.p8"
+          ASC_KEY_PATH="$RUNNER_TEMP/AuthKey.p8" \
+            "$RUNNER_TEMP/asc-venv/bin/python" scripts/upload-app-store-screenshots.py \
+            --app-id 6812283839 \
+            --directory app-store-screenshots \
+            --display-type APP_IPHONE_69
       - name: Upload screenshot artifact
         uses: actions/upload-artifact@v4
         with:
