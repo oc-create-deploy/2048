@@ -78,7 +78,7 @@ jobs:
             "$RUNNER_TEMP/asc-venv/bin/python" scripts/upload-app-store-screenshots.py \
             --app-id 6812283839 \
             --directory app-store-screenshots \
-            --display-type APP_IPHONE_69
+            --display-type APP_IPHONE_67
       - name: Upload screenshot artifact
         uses: actions/upload-artifact@v4
         with:

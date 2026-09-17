@@ -122,7 +122,7 @@ def main():
     parser.add_argument("--app-id", required=True)
     parser.add_argument("--directory", type=Path, required=True)
     parser.add_argument("--version", default="1.0")
-    parser.add_argument("--display-type", default="APP_IPHONE_69")
+    parser.add_argument("--display-type", default="APP_IPHONE_67")
     args = parser.parse_args()
 
     paths = sorted(args.directory.glob("*.png"))
