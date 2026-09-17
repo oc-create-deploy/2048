@@ -11,6 +11,8 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 35
     steps:
+      - name: Check out release automation
+        uses: actions/checkout@v4
       - name: Check out Velvet Solitaire
         uses: actions/checkout@v4
         with:
