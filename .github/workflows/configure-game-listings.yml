@@ -1,0 +1,31 @@
+name: Configure Game App Store Listings
+
+on:
+  workflow_dispatch:
+    inputs:
+      game:
+        description: Game slug from configure-game-listings.py
+        required: true
+        default: velvet-solitaire
+
+permissions:
+  contents: read
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure App Store Connect listing
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          GAME: ${{ inputs.game }}
+        run: |
+          python3 -m venv "$RUNNER_TEMP/asc-venv"
+          "$RUNNER_TEMP/asc-venv/bin/pip" install --quiet requests pyjwt cryptography
+          printf '%s' "$ASC_PRIVATE_KEY" > "$RUNNER_TEMP/AuthKey.p8"
+          ASC_KEY_PATH="$RUNNER_TEMP/AuthKey.p8" \
+            "$RUNNER_TEMP/asc-venv/bin/python" scripts/configure-game-listings.py --only "$GAME"
