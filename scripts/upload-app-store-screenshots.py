@@ -140,3 +140,7 @@ def main():
         print(f"Uploaded {path.name}")
     print(f"Uploaded {len(paths)} screenshots to {args.display_type}")
 
+
+if __name__ == "__main__":
+    main()
+
