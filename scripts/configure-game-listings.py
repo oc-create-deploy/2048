@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import json
 import os
 import time
 
@@ -148,11 +147,23 @@ class API:
 
 def configure(api, slug, game):
     app_id = game["app"]
-    for relation in ("appPriceSchedule", "appAvailabilityV2"):
-        state = api.request("GET", f"/apps/{app_id}/{relation}", ok=(200, 404))
-        print(f"{slug} {relation}: {json.dumps(state, sort_keys=True)}")
     prices = api.request("GET", f"/appPriceSchedules/{app_id}/manualPrices?include=appPricePoint&limit=200")
-    print(f"{slug} manualPrices: {json.dumps(prices, sort_keys=True)}")
+    included_points = prices.get("included", [])
+    is_free = any(item.get("attributes", {}).get("customerPrice") == "0.0" for item in included_points)
+    availability = api.request("GET", f"/apps/{app_id}/appAvailabilityV2")
+    availability_id = availability["data"]["id"]
+    response = requests.get(
+        f"https://api.appstoreconnect.apple.com/v2/appAvailabilities/{availability_id}/territoryAvailabilities?limit=200",
+        headers=api.headers, timeout=60)
+    response.raise_for_status()
+    territory_items = response.json()["data"]
+    unavailable = [item["id"] for item in territory_items
+                   if not item.get("attributes", {}).get("available", False)]
+    available_in_new = availability["data"]["attributes"]["availableInNewTerritories"]
+    print(f"{slug} store state: free={is_free}; territories={len(territory_items)}; "
+          f"unavailable={len(unavailable)}; availableInNewTerritories={available_in_new}")
+    if not is_free or unavailable or not available_in_new:
+        raise RuntimeError(f"{slug} pricing or worldwide availability is incomplete")
     app_info = api.get_data(f"/apps/{app_id}/appInfos")[0]
     info_id = app_info["id"]
     versions = api.get_data(f"/apps/{app_id}/appStoreVersions?filter[platform]=IOS&limit=10")
