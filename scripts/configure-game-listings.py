@@ -148,9 +148,11 @@ class API:
 
 def configure(api, slug, game):
     app_id = game["app"]
-    for relation in ("appPriceSchedule", "appAvailability"):
+    for relation in ("appPriceSchedule", "appAvailabilityV2"):
         state = api.request("GET", f"/apps/{app_id}/{relation}", ok=(200, 404))
         print(f"{slug} {relation}: {json.dumps(state, sort_keys=True)}")
+    prices = api.request("GET", f"/appPriceSchedules/{app_id}/manualPrices?include=appPricePoint&limit=200")
+    print(f"{slug} manualPrices: {json.dumps(prices, sort_keys=True)}")
     app_info = api.get_data(f"/apps/{app_id}/appInfos")[0]
     info_id = app_info["id"]
     versions = api.get_data(f"/apps/{app_id}/appStoreVersions?filter[platform]=IOS&limit=10")
