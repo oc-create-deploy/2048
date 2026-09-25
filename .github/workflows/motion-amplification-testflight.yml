@@ -1,0 +1,308 @@
+name: Motion Amplification Camera TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: App Store build number
+        required: true
+        default: '1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: motion-amplification-testflight
+  cancel-in-progress: false
+
+jobs:
+  archive-and-upload:
+    runs-on: macos-26
+    timeout-minutes: 75
+    env:
+      APP_BUNDLE_ID: com.industrial.motionamplification
+      KEYCHAIN_PASSWORD: temporary-motion-camera-keychain-password
+    steps:
+      - name: Check out Motion Amplification Camera
+        uses: actions/checkout@v4
+        with:
+          repository: oc-create-deploy/motion-amplification-camera
+          ref: main
+          path: app
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies and validate
+        working-directory: app
+        run: |
+          flutter pub get
+          dart format --output=none --set-exit-if-changed lib test
+          flutter analyze
+          flutter test
+          flutter build ios --debug --simulator
+          xcodebuild test \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -sdk iphonesimulator \
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Verify App Store destination and create provisioning profile
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH="$RUNNER_TEMP/distribution.p12"
+          PROFILE_PATH="$RUNNER_TEMP/app-store.mobileprovision"
+          printf '%s' "$BUILD_CERTIFICATE_BASE64" | base64 -D > "$CERTIFICATE_PATH"
+
+          if ! openssl pkcs12 -in "$CERTIFICATE_PATH" -clcerts -nokeys -passin env:P12_PASSWORD -out "$RUNNER_TEMP/distribution.pem"; then
+            openssl pkcs12 -legacy -in "$CERTIFICATE_PATH" -clcerts -nokeys -passin env:P12_PASSWORD -out "$RUNNER_TEMP/distribution.pem"
+          fi
+          export CERTIFICATE_SERIAL=$(openssl x509 -in "$RUNNER_TEMP/distribution.pem" -noout -serial | cut -d= -f2)
+          export CERTIFICATE_PATH PROFILE_PATH
+          echo "CERTIFICATE_PATH=$CERTIFICATE_PATH" >> "$GITHUB_ENV"
+          echo "PROFILE_PATH=$PROFILE_PATH" >> "$GITHUB_ENV"
+
+          python3 -m venv "$RUNNER_TEMP/asc-venv"
+          "$RUNNER_TEMP/asc-venv/bin/pip" install --quiet pyjwt cryptography
+          "$RUNNER_TEMP/asc-venv/bin/python" - <<'PY'
+          import base64
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          import jwt
+
+          def make_token():
+              now = int(time.time())
+              return jwt.encode(
+                  {"iss": os.environ["ASC_ISSUER_ID"], "iat": now, "exp": now + 900, "aud": "appstoreconnect-v1"},
+                  os.environ["ASC_PRIVATE_KEY"],
+                  algorithm="ES256",
+                  headers={"kid": os.environ["ASC_KEY_ID"], "typ": "JWT"},
+              )
+
+          def request(method, path, body=None):
+              data = json.dumps(body).encode() if body is not None else None
+              req = urllib.request.Request(
+                  "https://api.appstoreconnect.apple.com" + path,
+                  data=data,
+                  method=method,
+                  headers={"Authorization": f"Bearer {make_token()}", "Content-Type": "application/json"},
+              )
+              try:
+                  with urllib.request.urlopen(req) as response:
+                      return json.load(response)
+              except urllib.error.HTTPError as error:
+                  detail = error.read().decode()
+                  raise RuntimeError(f"App Store Connect {method} {path} failed ({error.code}): {detail}") from error
+
+          identifier = urllib.parse.quote(os.environ["APP_BUNDLE_ID"], safe="")
+          apps = request("GET", f"/v1/apps?filter%5BbundleId%5D={identifier}&limit=2").get("data", [])
+          if len(apps) != 1:
+              raise RuntimeError(f"Expected one App Store app for {os.environ['APP_BUNDLE_ID']}, found {len(apps)}")
+          app_id = apps[0]["id"]
+          print(f"Confirmed App Store app: {apps[0]['attributes']['name']} ({app_id})")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"APP_STORE_APP_ID={app_id}\n")
+
+          bundle_records = request("GET", f"/v1/bundleIds?filter%5Bidentifier%5D={identifier}&limit=2").get("data", [])
+          if len(bundle_records) != 1:
+              raise RuntimeError(f"Expected one bundle ID record for {os.environ['APP_BUNDLE_ID']}")
+          bundle_id = bundle_records[0]["id"]
+
+          certificates = request("GET", "/v1/certificates?limit=200").get("data", [])
+          wanted_serial = os.environ["CERTIFICATE_SERIAL"].upper().lstrip("0")
+          certificate = next(
+              (
+                  item for item in certificates
+                  if str(item.get("attributes", {}).get("serialNumber", "")).upper().lstrip("0") == wanted_serial
+                  and item.get("attributes", {}).get("certificateType") in {"IOS_DISTRIBUTION", "DISTRIBUTION"}
+              ),
+              None,
+          )
+          if certificate is None:
+              raise RuntimeError("The installed distribution certificate was not found in App Store Connect")
+
+          profile_name = f"Motion Amplification App Store {os.environ['GITHUB_RUN_ID']}"
+          profile = request(
+              "POST",
+              "/v1/profiles",
+              {
+                  "data": {
+                      "type": "profiles",
+                      "attributes": {"name": profile_name, "profileType": "IOS_APP_STORE"},
+                      "relationships": {
+                          "bundleId": {"data": {"type": "bundleIds", "id": bundle_id}},
+                          "certificates": {"data": [{"type": "certificates", "id": certificate["id"]}]},
+                      },
+                  }
+              },
+          )["data"]
+          content = profile.get("attributes", {}).get("profileContent")
+          if not content:
+              raise RuntimeError("App Store Connect returned a profile without profileContent")
+          with open(os.environ["PROFILE_PATH"], "wb") as output:
+              output.write(base64.b64decode(content))
+          print(f"Created provisioning profile: {profile_name}")
+          PY
+
+      - name: Install signing identity and profile
+        env:
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          security cms -D -i "$PROFILE_PATH" > "$RUNNER_TEMP/profile.plist"
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c 'Print UUID' "$RUNNER_TEMP/profile.plist")
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c 'Print Name' "$RUNNER_TEMP/profile.plist")
+          TEAM_ID=$(/usr/libexec/PlistBuddy -c 'Print TeamIdentifier:0' "$RUNNER_TEMP/profile.plist")
+          export PROFILE_NAME TEAM_ID
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+
+          PBXPROJ_PATH="app/ios/Runner.xcodeproj/project.pbxproj" python3 - <<'PY'
+          import os
+          import re
+
+          path = os.environ["PBXPROJ_PATH"]
+          profile = os.environ["PROFILE_NAME"]
+          team = os.environ["TEAM_ID"]
+          with open(path, encoding="utf-8") as source:
+              content = source.read()
+          marker = 'CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";'
+          replacement = (
+              marker
+              + f'\n\t\t\t\tDEVELOPMENT_TEAM = {team};'
+              + '\n\t\t\t\tCODE_SIGN_STYLE = Manual;'
+              + '\n\t\t\t\tCODE_SIGN_IDENTITY = "Apple Distribution";'
+              + f'\n\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = "{profile}";'
+          )
+          if marker not in content:
+              raise RuntimeError("Runner build configurations were not found")
+          content = content.replace(marker, replacement)
+          content = content.replace('"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";', '"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Distribution";')
+          with open(path, "w", encoding="utf-8") as output:
+              output.write(content)
+          PY
+          echo "APPLE_TEAM_ID=$TEAM_ID" >> "$GITHUB_ENV"
+          echo "PROFILE_NAME=$PROFILE_NAME" >> "$GITHUB_ENV"
+
+      - name: Create App Store export options
+        run: |
+          python3 - <<'PY'
+          import os
+          import plistlib
+
+          options = {
+              "destination": "export",
+              "manageAppVersionAndBuildNumber": False,
+              "method": "app-store-connect",
+              "provisioningProfiles": {os.environ["APP_BUNDLE_ID"]: os.environ["PROFILE_NAME"]},
+              "signingCertificate": "Apple Distribution",
+              "signingStyle": "manual",
+              "stripSwiftSymbols": True,
+              "teamID": os.environ["APPLE_TEAM_ID"],
+              "uploadSymbols": True,
+          }
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "ExportOptions.plist"), "wb") as output:
+              plistlib.dump(options, output)
+          PY
+
+      - name: Build signed IPA
+        working-directory: app
+        run: >-
+          flutter build ipa --release
+          --build-name 1.0.0
+          --build-number "${{ inputs.build_number }}"
+          --export-options-plist "$RUNNER_TEMP/ExportOptions.plist"
+
+      - name: Upload to TestFlight
+        working-directory: app
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          PRIVATE_KEYS_DIR="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$PRIVATE_KEYS_DIR"
+          printf '%s' "$ASC_PRIVATE_KEY" > "$PRIVATE_KEYS_DIR/AuthKey_$ASC_KEY_ID.p8"
+          IPA_PATH=$(find build/ios/ipa -maxdepth 1 -name '*.ipa' -print -quit)
+          test -n "$IPA_PATH"
+          xcrun altool --upload-app --type ios --file "$IPA_PATH" --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+
+      - name: Wait for Apple processing
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          EXPECTED_BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          "$RUNNER_TEMP/asc-venv/bin/python" - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.parse
+          import urllib.request
+
+          import jwt
+
+          def make_token():
+              now = int(time.time())
+              return jwt.encode(
+                  {"iss": os.environ["ASC_ISSUER_ID"], "iat": now, "exp": now + 900, "aud": "appstoreconnect-v1"},
+                  os.environ["ASC_PRIVATE_KEY"],
+                  algorithm="ES256",
+                  headers={"kid": os.environ["ASC_KEY_ID"], "typ": "JWT"},
+              )
+
+          params = urllib.parse.urlencode({
+              "filter[app]": os.environ["APP_STORE_APP_ID"],
+              "filter[version]": os.environ["EXPECTED_BUILD_NUMBER"],
+              "limit": 1,
+          })
+          deadline = time.time() + 2400
+          while time.time() < deadline:
+              req = urllib.request.Request(
+                  "https://api.appstoreconnect.apple.com/v1/builds?" + params,
+                  headers={"Authorization": f"Bearer {make_token()}"},
+              )
+              with urllib.request.urlopen(req) as response:
+                  builds = json.load(response).get("data", [])
+              if builds:
+                  attributes = builds[0]["attributes"]
+                  state = attributes.get("processingState")
+                  compliance = attributes.get("usesNonExemptEncryption")
+                  print(f"Apple processing state: {state}; usesNonExemptEncryption={compliance}", flush=True)
+                  if state == "VALID" and compliance is False:
+                      raise SystemExit(0)
+                  if state in {"FAILED", "INVALID"}:
+                      raise RuntimeError(f"Apple processing ended in {state}")
+              time.sleep(30)
+          raise TimeoutError("Apple did not finish processing within 40 minutes")
+          PY
+
+      - name: Upload IPA artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: motion-amplification-camera-ios-${{ inputs.build_number }}
+          path: app/build/ios/ipa/*.ipa
+          if-no-files-found: ignore
+          retention-days: 14
