@@ -94,9 +94,8 @@ jobs:
           group = matching_groups[0]
           group_id = group["id"]
 
-          assigned_groups = request("GET", f"/v1/builds/{build_id}/betaGroups?limit=200").get("data", [])
-          assigned_ids = {item["id"] for item in assigned_groups}
-          if group_id not in assigned_ids and not group.get("attributes", {}).get("hasAccessToAllBuilds"):
+          automatic_access = group.get("attributes", {}).get("hasAccessToAllBuilds") is True
+          if not automatic_access:
               request(
                   "POST",
                   f"/v1/betaGroups/{group_id}/relationships/builds",
@@ -124,6 +123,6 @@ jobs:
           print(f"Export compliance: cleared")
           print(f"Internal state: {internal_state}")
           print(f"Group: {group['attributes']['name']}")
-          print(f"Automatic access: {group['attributes'].get('hasAccessToAllBuilds')}")
+          print(f"Automatic access: {automatic_access}")
           print(f"Assigned testers: {len(testers)}")
           PY
