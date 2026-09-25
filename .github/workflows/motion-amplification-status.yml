@@ -1,0 +1,97 @@
+name: Motion Amplification Camera TestFlight Status
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: App Store build number
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify processing and internal distribution
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          APP_STORE_APP_ID: '6815931755'
+          EXPECTED_BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          python3 -m venv "$RUNNER_TEMP/asc-venv"
+          "$RUNNER_TEMP/asc-venv/bin/pip" install --quiet pyjwt cryptography
+          "$RUNNER_TEMP/asc-venv/bin/python" - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.parse
+          import urllib.request
+
+          import jwt
+
+          def token():
+              now = int(time.time())
+              return jwt.encode(
+                  {"iss": os.environ["ASC_ISSUER_ID"], "iat": now, "exp": now + 900, "aud": "appstoreconnect-v1"},
+                  os.environ["ASC_PRIVATE_KEY"],
+                  algorithm="ES256",
+                  headers={"kid": os.environ["ASC_KEY_ID"], "typ": "JWT"},
+              )
+
+          def get(path):
+              request = urllib.request.Request(
+                  "https://api.appstoreconnect.apple.com" + path,
+                  headers={"Authorization": f"Bearer {token()}"},
+              )
+              with urllib.request.urlopen(request) as response:
+                  return json.load(response)
+
+          params = urllib.parse.urlencode({
+              "filter[app]": os.environ["APP_STORE_APP_ID"],
+              "filter[version]": os.environ["EXPECTED_BUILD_NUMBER"],
+              "limit": 1,
+          })
+          builds = get("/v1/builds?" + params).get("data", [])
+          if len(builds) != 1:
+              raise RuntimeError(f"Expected one indexed build, found {len(builds)}")
+          build = builds[0]
+          attributes = build["attributes"]
+          build_id = build["id"]
+          detail = get(f"/v1/builds/{build_id}/buildBetaDetail")["data"]["attributes"]
+          groups = get(f"/v1/builds/{build_id}/betaGroups?limit=50").get("data", [])
+          group_summary = []
+          tester_count = 0
+          for group in groups:
+              attrs = group.get("attributes", {})
+              testers = get(f"/v1/betaGroups/{group['id']}/betaTesters?limit=200").get("data", [])
+              tester_count += len(testers)
+              group_summary.append({
+                  "name": attrs.get("name"),
+                  "internal": attrs.get("isInternalGroup"),
+                  "automatic": attrs.get("hasAccessToAllBuilds"),
+                  "testers": len(testers),
+              })
+          result = {
+              "buildNumber": attributes.get("version"),
+              "processingState": attributes.get("processingState"),
+              "usesNonExemptEncryption": attributes.get("usesNonExemptEncryption"),
+              "internalBuildState": detail.get("internalBuildState"),
+              "externalBuildState": detail.get("externalBuildState"),
+              "groups": group_summary,
+              "testerCount": tester_count,
+          }
+          print(json.dumps(result, indent=2))
+          if attributes.get("processingState") != "VALID":
+              raise RuntimeError("Build is not VALID")
+          if attributes.get("usesNonExemptEncryption") is not False:
+              raise RuntimeError("Export compliance is not cleared")
+          if detail.get("internalBuildState") not in {"READY_FOR_BETA_TESTING", "IN_BETA_TESTING"}:
+              raise RuntimeError("Build is not ready for internal testing")
+          if not any(item["internal"] and item["testers"] > 0 for item in group_summary):
+              raise RuntimeError("No internal tester group with testers has access to this build")
+          PY
