@@ -1,0 +1,129 @@
+name: Verify Motion Amplification TestFlight Distribution
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: App Store build number
+        required: true
+        default: '3'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-internal-distribution:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_BUNDLE_ID: com.industrial.motionamplification
+      INTERNAL_GROUP_NAME: Internal Testers
+      EXPECTED_BUILD_NUMBER: ${{ inputs.build_number }}
+    steps:
+      - name: Verify build and internal tester access
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          python3 -m pip install --quiet pyjwt cryptography
+          python3 - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          import jwt
+
+          def make_token():
+              now = int(time.time())
+              return jwt.encode(
+                  {"iss": os.environ["ASC_ISSUER_ID"], "iat": now, "exp": now + 900, "aud": "appstoreconnect-v1"},
+                  os.environ["ASC_PRIVATE_KEY"],
+                  algorithm="ES256",
+                  headers={"kid": os.environ["ASC_KEY_ID"], "typ": "JWT"},
+              )
+
+          def request(method, path, body=None):
+              data = json.dumps(body).encode() if body is not None else None
+              req = urllib.request.Request(
+                  "https://api.appstoreconnect.apple.com" + path,
+                  data=data,
+                  method=method,
+                  headers={"Authorization": f"Bearer {make_token()}", "Content-Type": "application/json"},
+              )
+              try:
+                  with urllib.request.urlopen(req) as response:
+                      return json.load(response) if response.status != 204 else {}
+              except urllib.error.HTTPError as error:
+                  detail = error.read().decode()
+                  raise RuntimeError(f"App Store Connect {method} {path} failed ({error.code}): {detail}") from error
+
+          identifier = urllib.parse.quote(os.environ["APP_BUNDLE_ID"], safe="")
+          apps = request("GET", f"/v1/apps?filter%5BbundleId%5D={identifier}&limit=2").get("data", [])
+          if len(apps) != 1:
+              raise RuntimeError(f"Expected one app for {os.environ['APP_BUNDLE_ID']}, found {len(apps)}")
+          app_id = apps[0]["id"]
+
+          params = urllib.parse.urlencode({
+              "filter[app]": app_id,
+              "filter[version]": os.environ["EXPECTED_BUILD_NUMBER"],
+              "limit": 2,
+          })
+          builds = request("GET", "/v1/builds?" + params).get("data", [])
+          if len(builds) != 1:
+              raise RuntimeError(f"Expected one build {os.environ['EXPECTED_BUILD_NUMBER']}, found {len(builds)}")
+          build = builds[0]
+          build_id = build["id"]
+          attrs = build["attributes"]
+          if attrs.get("processingState") != "VALID":
+              raise RuntimeError(f"Build processing state is {attrs.get('processingState')}, expected VALID")
+          if attrs.get("usesNonExemptEncryption") is not False:
+              raise RuntimeError("Build export-compliance state is not cleared")
+
+          groups = request("GET", f"/v1/apps/{app_id}/betaGroups?limit=200").get("data", [])
+          matching_groups = [
+              group for group in groups
+              if group.get("attributes", {}).get("name") == os.environ["INTERNAL_GROUP_NAME"]
+              and group.get("attributes", {}).get("isInternalGroup") is True
+          ]
+          if len(matching_groups) != 1:
+              raise RuntimeError(f"Expected one internal group named {os.environ['INTERNAL_GROUP_NAME']}, found {len(matching_groups)}")
+          group = matching_groups[0]
+          group_id = group["id"]
+
+          assigned_groups = request("GET", f"/v1/builds/{build_id}/betaGroups?limit=200").get("data", [])
+          assigned_ids = {item["id"] for item in assigned_groups}
+          if group_id not in assigned_ids and not group.get("attributes", {}).get("hasAccessToAllBuilds"):
+              request(
+                  "POST",
+                  f"/v1/betaGroups/{group_id}/relationships/builds",
+                  {"data": [{"type": "builds", "id": build_id}]},
+              )
+
+          testers = request("GET", f"/v1/betaGroups/{group_id}/betaTesters?limit=200").get("data", [])
+          if not testers:
+              raise RuntimeError(f"Internal group {os.environ['INTERNAL_GROUP_NAME']} has no testers")
+
+          deadline = time.time() + 300
+          internal_state = None
+          while time.time() < deadline:
+              detail = request("GET", f"/v1/builds/{build_id}/buildBetaDetail")["data"]
+              internal_state = detail.get("attributes", {}).get("internalBuildState")
+              if internal_state in {"READY_FOR_BETA_TESTING", "IN_BETA_TESTING"}:
+                  break
+              time.sleep(15)
+          else:
+              raise RuntimeError(f"Build internal state did not become testable; last state: {internal_state}")
+
+          print(f"App: {apps[0]['attributes']['name']} ({os.environ['APP_BUNDLE_ID']})")
+          print(f"Build: {os.environ['EXPECTED_BUILD_NUMBER']}")
+          print(f"Processing: {attrs.get('processingState')}")
+          print(f"Export compliance: cleared")
+          print(f"Internal state: {internal_state}")
+          print(f"Group: {group['attributes']['name']}")
+          print(f"Automatic access: {group['attributes'].get('hasAccessToAllBuilds')}")
+          print(f"Assigned testers: {len(testers)}")
+          PY
