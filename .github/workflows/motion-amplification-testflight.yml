@@ -47,7 +47,7 @@ jobs:
             -workspace ios/Runner.xcworkspace \
             -scheme Runner \
             -sdk iphonesimulator \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Verify App Store destination and create provisioning profile
