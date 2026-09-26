@@ -88,7 +88,12 @@ jobs:
               with open(os.path.join(output_dir, f"crash-{crash_id}.json"), "w", encoding="utf-8") as handle:
                   json.dump(log, handle, indent=2)
 
-          signatures = get(f"/v1/builds/{build_id}/diagnosticSignatures?limit=200")
+          try:
+              signatures = get(f"/v1/builds/{build_id}/diagnosticSignatures?limit=200")
+          except RuntimeError as error:
+              # Metrics signatures can lag a newly distributed TestFlight
+              # build. Beta crash submissions above are available sooner.
+              signatures = {"data": [], "warning": str(error)}
           with open(os.path.join(output_dir, "diagnostic-signatures.json"), "w", encoding="utf-8") as handle:
               json.dump(signatures, handle, indent=2)
           print(json.dumps({
