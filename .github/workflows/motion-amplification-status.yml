@@ -68,8 +68,8 @@ jobs:
           attributes = build["attributes"]
           build_id = build["id"]
           detail = get(f"/v1/builds/{build_id}/buildBetaDetail")["data"]["attributes"]
-          group_links = get(f"/v1/builds/{build_id}/relationships/betaGroups?limit=50").get("data", [])
-          groups = [get(f"/v1/betaGroups/{item['id']}")["data"] for item in group_links]
+          group_params = urllib.parse.urlencode({"filter[builds]": build_id, "limit": 50})
+          groups = get(f"/v1/betaGroups?{group_params}").get("data", [])
           group_summary = []
           tester_count = 0
           for group in groups:
