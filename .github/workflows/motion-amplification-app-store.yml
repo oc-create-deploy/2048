@@ -1,0 +1,94 @@
+name: Motion Amplification App Store Preparation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure production listing
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          python3 -m venv "$RUNNER_TEMP/asc-venv"
+          "$RUNNER_TEMP/asc-venv/bin/pip" install --quiet requests pyjwt cryptography
+          printf '%s' "$ASC_PRIVATE_KEY" > "$RUNNER_TEMP/AuthKey.p8"
+          ASC_KEY_PATH="$RUNNER_TEMP/AuthKey.p8" \
+            "$RUNNER_TEMP/asc-venv/bin/python" scripts/configure-motion-amplification-listing.py
+
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out Motion Amplification Camera assets
+        uses: actions/checkout@v4
+        with:
+          repository: oc-create-deploy/motion-amplification-camera
+          ref: main
+          path: app
+      - name: Validate screenshot assets
+        run: |
+          python3 - <<'PY'
+          import struct
+          from pathlib import Path
+          paths = sorted(Path("app/app-store/screenshots").glob("*.png"))
+          if len(paths) != 3:
+              raise SystemExit(f"Expected 3 screenshots, found {len(paths)}")
+          for path in paths:
+              with path.open("rb") as source:
+                  signature = source.read(24)
+              if signature[:8] != b"\x89PNG\r\n\x1a\n":
+                  raise SystemExit(f"{path}: not a PNG")
+              size = struct.unpack(">II", signature[16:24])
+              if size != (1320, 2868):
+                  raise SystemExit(f"{path}: expected 1320x2868, got {size}")
+              print(f"Validated {path}")
+          PY
+      - name: Upload screenshots to App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          python3 -m venv "$RUNNER_TEMP/asc-venv"
+          "$RUNNER_TEMP/asc-venv/bin/pip" install --quiet requests pyjwt cryptography
+          printf '%s' "$ASC_PRIVATE_KEY" > "$RUNNER_TEMP/AuthKey.p8"
+          APP_ID=$(ASC_KEY_PATH="$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/asc-venv/bin/python" - <<'PY'
+          import os, time, urllib.parse
+          import jwt, requests
+          with open(os.environ["ASC_KEY_PATH"]) as source:
+              key = source.read()
+          now = int(time.time())
+          token = jwt.encode({"iss": os.environ["ASC_ISSUER_ID"], "iat": now, "exp": now + 900,
+                              "aud": "appstoreconnect-v1"}, key, algorithm="ES256",
+                             headers={"kid": os.environ["ASC_KEY_ID"], "typ": "JWT"})
+          bundle = urllib.parse.quote("com.industrial.motionamplification", safe="")
+          response = requests.get(f"https://api.appstoreconnect.apple.com/v1/apps?filter[bundleId]={bundle}&limit=2",
+                                  headers={"Authorization": f"Bearer {token}"}, timeout=60)
+          response.raise_for_status()
+          items = response.json()["data"]
+          if len(items) != 1:
+              raise SystemExit(f"Expected one app, found {len(items)}")
+          print(items[0]["id"])
+          PY
+          )
+          ASC_KEY_PATH="$RUNNER_TEMP/AuthKey.p8" \
+            "$RUNNER_TEMP/asc-venv/bin/python" scripts/upload-app-store-screenshots.py \
+            --app-id "$APP_ID" \
+            --directory app/app-store/screenshots \
+            --display-type APP_IPHONE_69
+      - uses: actions/upload-artifact@v4
+        with:
+          name: motion-amplification-app-store-screenshots
+          path: app/app-store/screenshots/*.png
+          if-no-files-found: error
+          retention-days: 30
