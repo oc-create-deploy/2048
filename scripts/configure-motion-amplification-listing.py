@@ -67,6 +67,69 @@ class API:
     def data(self, path):
         return self.request("GET", path)["data"]
 
+    def request_v2(self, method, path, payload=None, ok=(200, 201, 204)):
+        response = requests.request(
+            method, "https://api.appstoreconnect.apple.com/v2" + path,
+            headers=self.headers, json=payload, timeout=90)
+        if response.status_code not in ok:
+            raise RuntimeError(f"{method} /v2{path}: {response.status_code} {response.text}")
+        return response.json() if response.content else None
+
+
+def ensure_free_price(api, app_id):
+    current = api.request("GET", f"/apps/{app_id}/appPriceSchedule",
+                          ok=(200, 404))
+    if current and current.get("data"):
+        return
+    points = api.data(
+        f"/apps/{app_id}/appPricePoints?filter[territory]=USA&include=territory&limit=200")
+    free = next((item for item in points
+                 if item.get("attributes", {}).get("customerPrice") == "0.0"), None)
+    if free is None:
+        raise RuntimeError("The free USA App Store price point was not found")
+    inline_id = "${free-price}"
+    api.request("POST", "/appPriceSchedules", {"data": {
+        "type": "appPriceSchedules",
+        "relationships": {
+            "app": {"data": {"type": "apps", "id": app_id}},
+            "baseTerritory": {"data": {"type": "territories", "id": "USA"}},
+            "manualPrices": {"data": [{"type": "appPrices", "id": inline_id}]},
+        }}, "included": [{
+            "type": "appPrices", "id": inline_id,
+            "attributes": {"startDate": None, "endDate": None},
+            "relationships": {"appPricePoint": {"data": {
+                "type": "appPricePoints", "id": free["id"]}}},
+        }]})
+    print("Created free App Store price schedule with USA as the base territory")
+
+
+def ensure_worldwide_availability(api, app_id):
+    current = api.request("GET", f"/apps/{app_id}/appAvailabilityV2",
+                          ok=(200, 404))
+    if current and current.get("data"):
+        return
+    territories = api.data("/territories?limit=200")
+    linkages = []
+    included = []
+    for index, territory in enumerate(territories):
+        inline_id = f"${{availability-{index}}}"
+        linkages.append({"type": "territoryAvailabilities", "id": inline_id})
+        included.append({
+            "type": "territoryAvailabilities", "id": inline_id,
+            "attributes": {"available": True, "preOrderEnabled": False,
+                           "releaseDate": None},
+            "relationships": {"territory": {"data": {
+                "type": "territories", "id": territory["id"]}}},
+        })
+    api.request_v2("POST", "/appAvailabilities", {"data": {
+        "type": "appAvailabilities",
+        "attributes": {"availableInNewTerritories": True},
+        "relationships": {
+            "app": {"data": {"type": "apps", "id": app_id}},
+            "territoryAvailabilities": {"data": linkages},
+        }}, "included": included})
+    print(f"Created App Store availability for all {len(territories)} territories")
+
 
 def upsert_info_localization(api, info_id):
     items = api.data(f"/appInfos/{info_id}/appInfoLocalizations")
@@ -212,13 +275,13 @@ def main():
         "type": "appStoreVersions", "id": version_id,
         "relationships": {"build": {"data": {"type": "builds", "id": build["id"]}}}}})
 
-    try:
-        prices = api.request("GET", f"/appPriceSchedules/{app_id}/manualPrices?include=appPricePoint&limit=200")
-        is_free = any(item.get("attributes", {}).get("customerPrice") == "0.0"
-                      for item in prices.get("included", []))
-    except RuntimeError as error:
-        is_free = False
-        print(f"Pricing verification warning: {error}")
+    ensure_free_price(api, app_id)
+    ensure_worldwide_availability(api, app_id)
+
+    prices = api.request(
+        "GET", f"/appPriceSchedules/{app_id}/manualPrices?include=appPricePoint&limit=200")
+    is_free = any(item.get("attributes", {}).get("customerPrice") == "0.0"
+                  for item in prices.get("included", []))
 
     availability = api.request("GET", f"/apps/{app_id}/appAvailabilityV2")
     availability_id = availability["data"]["id"]

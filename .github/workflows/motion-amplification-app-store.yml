@@ -85,7 +85,7 @@ jobs:
             "$RUNNER_TEMP/asc-venv/bin/python" scripts/upload-app-store-screenshots.py \
             --app-id "$APP_ID" \
             --directory app/app-store/screenshots \
-            --display-type APP_IPHONE_69
+            --display-type APP_IPHONE_67
       - uses: actions/upload-artifact@v4
         with:
           name: motion-amplification-app-store-screenshots
