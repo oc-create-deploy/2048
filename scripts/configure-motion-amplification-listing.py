@@ -77,9 +77,12 @@ class API:
 
 
 def ensure_free_price(api, app_id):
-    current = api.request("GET", f"/apps/{app_id}/appPriceSchedule",
-                          ok=(200, 404))
-    if current and current.get("data"):
+    current_prices = api.request(
+        "GET", f"/appPriceSchedules/{app_id}/manualPrices?include=appPricePoint&limit=200",
+        ok=(200, 404))
+    if current_prices and any(
+            item.get("attributes", {}).get("customerPrice") == "0.0"
+            for item in current_prices.get("included", [])):
         return
     points = api.data(
         f"/apps/{app_id}/appPricePoints?filter[territory]=USA&include=territory&limit=200")
