@@ -27,6 +27,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: oc-create-deploy/motion-amplification-camera
+          ssh-key: ${{ secrets.MOTION_CAMERA_REPO_DEPLOY_KEY }}
+          persist-credentials: false
           ref: main
           path: app
 
