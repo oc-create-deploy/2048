@@ -32,14 +32,16 @@ jobs:
           ref: main
           path: app
 
-      - name: Generate native project and run simulator tests
+      - name: Generate native project and validate
+        timeout-minutes: 15
         working-directory: app
         run: |
           brew install xcodegen
           xcodegen generate
-          xcodebuild test -project XRayPlastic.xcodeproj -scheme XRayPlastic \
-            -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -parallel-testing-enabled NO \
-            CODE_SIGNING_ALLOWED=NO -resultBundlePath "$RUNNER_TEMP/XRayPlasticTests.xcresult"
+          swift test
+          xcodebuild build -project XRayPlastic.xcodeproj -scheme XRayPlastic \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
 
       - name: Verify App Store destination and create provisioning profile
         env:
