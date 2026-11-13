@@ -51,17 +51,35 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
 
       - name: Simulator online room and painter smoke
-        timeout-minutes: 9
+        timeout-minutes: 20
         working-directory: app
         run: |
           DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import sys,json; d=json.load(sys.stdin); print(next(v["udid"] for a in d["devices"].values() for v in a if "iPhone" in v["name"]))')
-          xcodebuild test -project ChameleonsMC.xcodeproj -scheme ChameleonsMC \
+          echo "SIMULATOR_ID=$DEVICE_ID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$DEVICE_ID" || true
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          xcodebuild test -parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 -project ChameleonsMC.xcodeproj -scheme ChameleonsMC \
             -destination "platform=iOS Simulator,id=$DEVICE_ID" \
             -only-testing:ChameleonsMCUITests -resultBundlePath "$RUNNER_TEMP/GameSmoke.xcresult" \
             CODE_SIGNING_ALLOWED=NO
           xcrun xcresulttool export attachments --path "$RUNNER_TEMP/GameSmoke.xcresult" --output-path "$RUNNER_TEMP/game-screenshots"
 
+      - name: Collect simulator diagnostics and attachments
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/game-screenshots"
+          if [ -d "$RUNNER_TEMP/GameSmoke.xcresult" ]; then
+            xcrun xcresulttool export attachments --path "$RUNNER_TEMP/GameSmoke.xcresult" --output-path "$RUNNER_TEMP/game-screenshots" || true
+            xcrun xcresulttool get test-results tests --path "$RUNNER_TEMP/GameSmoke.xcresult" > "$RUNNER_TEMP/game-screenshots/tests.json" || true
+          fi
+          cp -R "$HOME/Library/Logs/DiagnosticReports" "$RUNNER_TEMP/game-screenshots/host-crashes" || true
+          if [ -n "$SIMULATOR_ID" ]; then
+            cp -R "$HOME/Library/Developer/CoreSimulator/Devices/$SIMULATOR_ID/data/Library/Logs/CrashReporter" "$RUNNER_TEMP/game-screenshots/simulator-crashes" || true
+            xcrun simctl io "$SIMULATOR_ID" screenshot "$RUNNER_TEMP/game-screenshots/final-screen.png" || true
+          fi
+
       - name: Save simulator visual evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: chameleons-simulator-screenshots
