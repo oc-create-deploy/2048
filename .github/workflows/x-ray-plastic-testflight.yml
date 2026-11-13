@@ -269,12 +269,3 @@ jobs:
               time.sleep(30)
           raise TimeoutError("Apple did not finish processing within 40 minutes")
           PY
-
-      - name: Upload IPA artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: x-ray-plastic-ios-${{ inputs.build_number }}
-          path: app/build/ios/ipa/*.ipa
-          if-no-files-found: ignore
-          retention-days: 14
