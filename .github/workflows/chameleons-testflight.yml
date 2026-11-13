@@ -33,7 +33,7 @@ jobs:
           repository: oc-create-deploy/chameleons
           ssh-key: ${{ secrets.CHAMELEONS_REPO_DEPLOY_KEY }}
           persist-credentials: false
-          ref: 55d1a8b8197d0f89c8e8e53c279e9a9ac6394a05
+          ref: 6be30bb2ebcca40ee9692e18a08c91c4ab19701c
           path: app
 
       - name: Generate native project and validate
