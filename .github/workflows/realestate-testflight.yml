@@ -6,7 +6,7 @@ on:
       build_number:
         description: App Store build number
         required: true
-        default: '15'
+        default: '16'
 
 permissions:
   contents: read
@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: oc-create-deploy/realestateanalyzer
-          ref: d9075d23965464d7e3cf9398629a2c7e9a3e5c04
+          ref: 3e6371fda44021d14686a6013831d23018da7887
           ssh-key: ${{ secrets.REALESTATE_REPO_DEPLOY_KEY }}
           persist-credentials: false
           path: app
@@ -45,6 +45,7 @@ jobs:
           dart format --output=none --set-exit-if-changed lib test
           flutter analyze
           flutter test
+          flutter build web --release
           flutter build ios --debug --simulator
 
       - name: Verify App Store destination and create provisioning profile
