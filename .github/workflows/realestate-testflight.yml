@@ -6,7 +6,7 @@ on:
       build_number:
         description: App Store build number
         required: true
-        default: '16'
+        default: '17'
 
 permissions:
   contents: read
@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: oc-create-deploy/realestateanalyzer
-          ref: 3e6371fda44021d14686a6013831d23018da7887
+          ref: fd6edd82fea4476706ce9f742a1069b47dce28b0
           ssh-key: ${{ secrets.REALESTATE_REPO_DEPLOY_KEY }}
           persist-credentials: false
           path: app
