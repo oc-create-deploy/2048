@@ -55,7 +55,25 @@ jobs:
           RECORDER_PID=$!
           trap 'kill -INT "$RECORDER_PID" 2>/dev/null || true; wait "$RECORDER_PID" || true' EXIT
           set -o pipefail
-          flutter drive --verbose --driver=test_driver/integration_test.dart --target=integration_test/native_playability_test.dart --device-id "$DEVICE_UDID" 2>&1 | tee native-qa/native-test.log
+          # Simulator unified-log discovery can lose the one VM-service line.
+          # Build/install explicitly and attach to a known loopback debug port.
+          flutter build ios --simulator --debug --target=integration_test/native_playability_test.dart 2>&1 | tee native-qa/native-build.log
+          xcrun simctl install "$DEVICE_UDID" build/ios/iphonesimulator/Runner.app
+          xcrun simctl launch --stdout="$PWD/native-qa/runner-stdout.log" --stderr="$PWD/native-qa/runner-stderr.log" "$DEVICE_UDID" Com.play.solitairegame --enable-dart-profiling --enable-checked-mode --verify-entry-points --start-paused --vm-service-port=8181 --disable-service-auth-codes
+          python3 - <<'PYWAIT'
+          import time, urllib.request
+          deadline = time.time() + 120
+          while time.time() < deadline:
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:8181/getVM', timeout=2) as r:
+                      if r.status == 200:
+                          break
+              except Exception:
+                  time.sleep(1)
+          else:
+              raise SystemExit('Native Dart VM did not become reachable within 120 seconds')
+          PYWAIT
+          flutter drive --verbose --driver=test_driver/integration_test.dart --target=integration_test/native_playability_test.dart --device-id "$DEVICE_UDID" --use-existing-app=http://127.0.0.1:8181/ 2>&1 | tee native-qa/native-test.log
       - name: Capture final simulator diagnostics
         if: always()
         run: |
