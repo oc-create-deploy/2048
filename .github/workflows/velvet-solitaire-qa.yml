@@ -1,0 +1,65 @@
+name: Velvet Solitaire Native QA
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Exact reviewed Velvet commit SHA or QA branch
+        required: true
+        default: fix/playability-2026-11-19
+permissions:
+  contents: read
+concurrency:
+  group: velvet-solitaire-native-qa
+  cancel-in-progress: true
+jobs:
+  iphone-gameplay:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: oc-create-deploy/velvet-solitaire
+          ssh-key: ${{ secrets.VELVET_REPO_DEPLOY_KEY }}
+          ref: ${{ inputs.source_ref }}
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - name: Validate source
+        run: |
+          flutter pub get
+          dart format --output=none --set-exit-if-changed lib test integration_test test_driver
+          flutter analyze --no-fatal-infos
+          flutter test
+      - name: Select and boot iPhone
+        run: |
+          DEVICE_UDID=$(python3 - <<'PY'
+          import json,subprocess
+          devices=json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','-j']))['devices']
+          phones=[d for group in devices.values() for d in group if 'iPhone' in d['name']]
+          if not phones: raise SystemExit('No available iPhone simulator')
+          preferred=[d for d in phones if 'Pro Max' in d['name']]
+          print((preferred or phones)[-1]['udid'])
+          PY
+          )
+          echo "DEVICE_UDID=$DEVICE_UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$DEVICE_UDID" || true
+          xcrun simctl bootstatus "$DEVICE_UDID" -b
+          xcrun simctl status_bar "$DEVICE_UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
+      - name: Native touch gameplay and screenshots
+        run: |
+          mkdir -p native-qa
+          xcrun simctl io "$DEVICE_UDID" recordVideo --codec=h264 --force native-qa/gameplay.mov &
+          RECORDER_PID=$!
+          trap 'kill -INT "$RECORDER_PID" 2>/dev/null || true; wait "$RECORDER_PID" || true' EXIT
+          set -o pipefail
+          flutter drive --driver=test_driver/integration_test.dart --target=integration_test/native_playability_test.dart --device-id "$DEVICE_UDID" 2>&1 | tee native-qa/native-test.log
+      - name: Retain visual and gameplay evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: velvet-native-qa-${{ github.run_id }}
+          path: native-qa/
+          if-no-files-found: warn
+          retention-days: 7
